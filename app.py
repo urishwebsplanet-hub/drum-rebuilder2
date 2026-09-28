@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import io
 import os
 import tempfile
@@ -10,6 +11,9 @@ import mido
 import numpy as np
 import soundfile as sf
 import streamlit as st
+from streamlit.components.v1 import declare_component
+
+music_recorder = declare_component("music_recorder", path=str(Path(__file__).parent / "music_recorder"))
 
 APP_TITLE = "Drum Rebuilder"
 SR = 44100
@@ -194,7 +198,15 @@ def main():
 
     if source == "Record":
         st.write("Tap the microphone, then play the song through another speaker/device.")
-        audio = st.audio_input("Record up to 90 seconds", sample_rate=SR)
+        st.caption("Music recorder v2 — speech processing off when supported. Keep this page visible while recording.")
+        recording = music_recorder(key="music_capture", default=None)
+        if recording and recording.get("wav"):
+            try:
+                audio = io.BytesIO(base64.b64decode(recording["wav"], validate=True))
+            except (ValueError, TypeError):
+                st.error("Recording could not be read. Please record again.")
+            with st.expander("Microphone settings"):
+                st.json({k: recording.get("settings", {}).get(k, "Not reported") for k in ("echoCancellation", "noiseSuppression", "autoGainControl", "sampleRate")})
     else:
         audio = st.file_uploader("Choose audio", type=["wav", "mp3", "m4a", "flac", "ogg"])
         if audio is not None:
@@ -205,6 +217,7 @@ def main():
         st.stop()
 
     st.audio(audio)
+    st.download_button("Save original recording", audio.getvalue(), "original" + suffix, "audio/wav" if suffix == ".wav" else "application/octet-stream")
     if not st.button("Analyze & rebuild drums", type="primary"):
         st.stop()
 
